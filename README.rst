@@ -23,12 +23,12 @@ cases where you need Django to do some work before serving the actual file.
 Supported Python Versions
 =========================
 
-Python 3.8, 3.9, 3.10, 3.11, and 3.12 are currently supported by this library.
+Python 3.9, 3.10, 3.11, 3.12, and 3.13 are currently supported by this library.
 
 Supported Django Versions
 =========================
 
-Django 3.2, 4.2, and 5.0 are currently supported by this library.
+Django 4.2, 5.0, and 5.1 are currently supported by this library.
 
 Fork
 ====
