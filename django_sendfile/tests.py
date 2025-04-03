@@ -72,10 +72,8 @@ class TestSendfile(TempFileTestCase):
             real_sendfile(HttpRequest(), "notafile.txt")
 
     def test_404(self):
-        try:
+        with self.assertRaises(Http404):
             real_sendfile(HttpRequest(), 'fhdsjfhjk.txt')
-        except Http404:
-            pass
 
     def test_sendfile(self):
         response = real_sendfile(HttpRequest(), self._get_readme())
