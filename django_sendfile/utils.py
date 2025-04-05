@@ -56,7 +56,7 @@ def _sanitize_path(filepath):
 
 
 def sendfile(request, filename, attachment=False, attachment_filename=None,
-             mimetype=None, encoding=None):
+             mimetype=None, encoding=None, content_length=None):
     """
     Create a response to send file using backend configured in ``SENDFILE_BACKEND``
 
@@ -81,17 +81,17 @@ def sendfile(request, filename, attachment=False, attachment_filename=None,
         "-> filepath \'%s\' obtained', filename, filepath_obj)
     _sendfile = _get_sendfile()
 
-    if not filepath_obj.exists():
+    if getattr(settings, "SENDFILE_CHECK_FILE_EXISTS", True) and not filepath_obj.exists():
         raise Http404('"%s" does not exist' % filepath_obj)
 
-    guessed_mimetype, guessed_encoding = guess_type(str(filepath_obj))
-    if mimetype is None:
-        if guessed_mimetype:
-            mimetype = guessed_mimetype
-        else:
-            mimetype = 'application/octet-stream'
+    guessed_mimetype, guessed_encoding = guess_type(filepath_obj)
+    if guessed_mimetype is None:
+        guessed_mimetype = 'application/octet-stream'
 
-    response = _sendfile(request, filepath_obj, mimetype=mimetype)
+    try:
+        response = _sendfile(request, filepath_obj, mimetype=mimetype)
+    except FileNotFoundError:
+        raise Http404('"%s" does not exist' % filepath_obj)
 
     # Suggest to view (inline) or download (attachment) the file
     parts = ['attachment' if attachment else 'inline']
@@ -111,12 +111,18 @@ def sendfile(request, filename, attachment=False, attachment_filename=None,
 
     response['Content-Disposition'] = '; '.join(parts)
 
-    response['Content-length'] = filepath_obj.stat().st_size
-    response['Content-Type'] = mimetype
+    if content_length is not None:
+        response['Content-Length'] = content_length
+    else:
+        try:
+            response['Content-Length'] = filepath_obj.stat().st_size
+        except FileNotFoundError:
+            pass
 
-    if not encoding:
-        encoding = guessed_encoding
-    if encoding:
+    response['Content-Type'] = mimetype or guessed_mimetype
+
+    encoding = encoding or guessed_encoding
+    if encoding is not None:
         response['Content-Encoding'] = encoding
 
     return response

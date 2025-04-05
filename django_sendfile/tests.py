@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404, HttpRequest, HttpResponse
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.utils.encoding import smart_str
 
 from .utils import _get_sendfile
@@ -81,6 +82,8 @@ class TestSendfile(TempFileTestCase):
         self.assertEqual('text/plain', response['Content-Type'])
         self.assertEqual('inline; filename="testfile.txt"', response['Content-Disposition'])
         self.assertEqual(self._get_readme(), smart_str(response.content))
+        # file is actually empty, so 0 is correct
+        self.assertEqual('0', response['Content-Length'])
 
     def test_set_mimetype(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), mimetype='text/plain')
@@ -157,6 +160,19 @@ class TestSendfile(TempFileTestCase):
                     response['Content-Disposition']
                 )
 
+    def test_guess_mimetype_none(self):
+        response = real_sendfile(HttpRequest(), self.ensure_file('bluh.bluh'))
+        self.assertEqual('application/octet-stream', response['Content-Type'])
+
+    @override_settings(SENDFILE_CHECK_FILE_EXISTS=False)
+    def test_dont_check_file_exists(self):
+        response = real_sendfile(HttpRequest(), 'bluh.bluh')
+        self.assertEqual('application/octet-stream', response['Content-Type'])
+
+    def test_manually_set_content_length(self):
+        response = real_sendfile(HttpRequest(), self._get_readme(), content_length=123)
+        self.assertEqual(str(123), response['Content-Length'])
+
 
 class TestSimpleSendfileBackend(TempFileTestCase):
 
@@ -176,6 +192,12 @@ class TestSimpleSendfileBackend(TempFileTestCase):
 
     def test_sensible_file_access_in_simplesendfile(self):
         filepath = self.ensure_file('../passwd')
+        with self.assertRaises(Http404):
+            real_sendfile(HttpRequest(), filepath)
+
+    @override_settings(SENDFILE_CHECK_FILE_EXISTS=False)
+    def test_check_file_exists_still_raises_error(self):
+        filepath = "file/does/not/exist"
         with self.assertRaises(Http404):
             real_sendfile(HttpRequest(), filepath)
 
