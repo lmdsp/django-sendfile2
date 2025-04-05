@@ -201,37 +201,29 @@ class TestSimpleSendfileBackend(TempFileTestCase):
         with self.assertRaises(Http404):
             real_sendfile(HttpRequest(), filepath)
 
-    def test_was_modified_since(self):
+    def test_last_modified(self):
         request = HttpRequest()
-        request.META['HTTP_IF_MODIFIED_SINCE'] = 'Wed, 21 Oct 3015 07:28:00 GMT'
-        filepath = self.ensure_file('readme.txt')
-        response = real_sendfile(request, filepath)
-        self.assertEqual(response.status_code, 304)
-        self.assertNotIn('Last-Modified', response)
-
-    def test_was_modified_since_expired(self):
-        request = HttpRequest()
-        request.META['HTTP_IF_MODIFIED_SINCE'] = 'Wed, 21 Oct 2015 07:28:00 GMT'
+        request.method = 'GET'
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(request, filepath)
         self.assertEqual(response.status_code, 200)
-        self.assertIn('Last-Modified', response)
+        self.assertIn("Last-Modified", response)
 
-    def test_was_modified_since_invalid(self):
+        request.META['HTTP_IF_MODIFIED_SINCE'] = response['Last-Modified']
+        response = real_sendfile(request, filepath)
+        self.assertEqual(response.status_code, 304)
+
+    def test_etag(self):
         request = HttpRequest()
-        request.META['HTTP_IF_MODIFIED_SINCE'] = 'Wed, AA Oct 3015 07:28:00 GMT'
+        request.method = 'GET'
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(request, filepath)
         self.assertEqual(response.status_code, 200)
-        self.assertIn('Last-Modified', response)
+        self.assertIn("ETag", response)
 
-    def test_was_modified_since_non_standard_params(self):
-        request = HttpRequest()
-        request.META['HTTP_IF_MODIFIED_SINCE'] = 'Wed, 21 Oct 3015 07:28:00 GMT; length=123'
-        filepath = self.ensure_file('readme.txt')
+        request.META['HTTP_IF_NONE_MATCH'] = response['ETag']
         response = real_sendfile(request, filepath)
         self.assertEqual(response.status_code, 304)
-        self.assertNotIn('Last-Modified', response)
 
 
 @override_settings(SENDFILE_BACKEND='django_sendfile.backends.xsendfile')
