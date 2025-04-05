@@ -168,7 +168,8 @@ class TestDevelopmentSendfileBackend(TempFileTestCase):
     def test_correct_file(self):
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
+        response.close()  # prevent resource warning from occurring
 
     @override_settings(SENDFILE_CHECK_FILE_EXISTS=False)
     def test_check_file_exists_still_raises_error(self):
