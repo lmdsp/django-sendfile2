@@ -23,8 +23,13 @@ You will need to have the following set in your settings module:
 * ``SENDFILE_BACKEND`` - the dotted module notation of the backend you wish to use
 * ``SENDFILE_ROOT`` - the directory you wish to serve files from
 
-Additionally, you may need to set ``SENDFILE_URL`` . See the :doc:`backends`
-documentation for more details.
+Additionally, you may wish to use the following optional settings:
+
+* ``SENDFILE_CHECK_FILE_EXISTS`` - a bool defaulting to ``True``. When set to
+  ``False`` backends that don't require direct file access will not produce a
+  404 response if the file cannot be found locally.
+* ``SENDFILE_URL`` - defines the internal URL prefix used by some backends. See
+  the :doc:`backends` documentation for more details.
 
 
 Use In Views
