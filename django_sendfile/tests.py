@@ -29,21 +29,13 @@ class TempFileTestCase(TestCase):
         self.TEMP_FILE = mkdtemp()
         self.TEMP_FILE_ROOT = os.path.join(self.TEMP_FILE, "root")
         os.mkdir(self.TEMP_FILE_ROOT)
-        self.setSendfileRoot(self.TEMP_FILE_ROOT)
+        settings.SENDFILE_ROOT = self.TEMP_FILE_ROOT
+        _get_sendfile.cache_clear()
 
     def tearDown(self):
         super(TempFileTestCase, self).tearDown()
         if os.path.exists(self.TEMP_FILE_ROOT):
             shutil.rmtree(self.TEMP_FILE_ROOT)
-
-    def setSendfileBackend(self, backend):
-        '''set the backend clearing the cache'''
-        settings.SENDFILE_BACKEND = backend
-        _get_sendfile.cache_clear()
-
-    def setSendfileRoot(self, path):
-        '''set the backend clearing the cache'''
-        settings.SENDFILE_ROOT = path
 
     def ensure_file(self, filename):
         path = os.path.join(self.TEMP_FILE_ROOT, filename)
@@ -52,23 +44,19 @@ class TempFileTestCase(TestCase):
         return path
 
 
+@override_settings(SENDFILE_BACKEND='django_sendfile.tests')
 class TestSendfile(TempFileTestCase):
-
-    def setUp(self):
-        super(TestSendfile, self).setUp()
-        # set ourselves to be the sendfile backend
-        self.setSendfileBackend('django_sendfile.tests')
 
     def _get_readme(self):
         return self.ensure_file('testfile.txt')
 
+    @override_settings(SENDFILE_BACKEND=None)
     def test_backend_is_none(self):
-        self.setSendfileBackend(None)
         with self.assertRaises(ImproperlyConfigured):
             real_sendfile(HttpRequest(), "notafile.txt")
 
+    @override_settings(SENDFILE_ROOT=None)
     def test_root_is_none(self):
-        self.setSendfileRoot(None)
         with self.assertRaises(ImproperlyConfigured):
             real_sendfile(HttpRequest(), "notafile.txt")
 
@@ -78,7 +66,7 @@ class TestSendfile(TempFileTestCase):
 
     def test_sendfile(self):
         response = real_sendfile(HttpRequest(), self._get_readme())
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('text/plain', response['Content-Type'])
         self.assertEqual('inline; filename="testfile.txt"', response['Content-Disposition'])
         self.assertEqual(self._get_readme(), smart_str(response.content))
@@ -87,47 +75,47 @@ class TestSendfile(TempFileTestCase):
 
     def test_set_mimetype(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), mimetype='text/plain')
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('text/plain', response['Content-Type'])
 
     def test_set_encoding(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), encoding='utf8')
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('utf8', response['Content-Encoding'])
 
     def test_inline_filename(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), attachment_filename='tests.txt')
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('inline; filename="tests.txt"', response['Content-Disposition'])
 
     def test_attachment(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), attachment=True)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('attachment; filename="testfile.txt"', response['Content-Disposition'])
 
     def test_attachment_filename_false(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), attachment=True,
                                  attachment_filename=False)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('attachment', response['Content-Disposition'])
 
     def test_attachment_filename(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), attachment=True,
                                  attachment_filename='tests.txt')
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('attachment; filename="tests.txt"', response['Content-Disposition'])
 
     def test_attachment_filename_unicode(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), attachment=True,
                                  attachment_filename='test’s.txt')
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual('attachment; filename="tests.txt"; filename*=UTF-8\'\'test%E2%80%99s.txt',
                          response['Content-Disposition'])
 
     def test_attachment_filename_with_space(self):
         response = real_sendfile(HttpRequest(), self._get_readme(), attachment=True,
                                  attachment_filename='space test’s.txt')
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(
             'attachment; filename="space tests.txt"; filename*=UTF-8\'\'space%20test%E2%80%99s.txt',
             response['Content-Disposition']
@@ -174,21 +162,34 @@ class TestSendfile(TempFileTestCase):
         self.assertEqual(str(123), response['Content-Length'])
 
 
-class TestSimpleSendfileBackend(TempFileTestCase):
-
-    def setUp(self):
-        super().setUp()
-        self.setSendfileBackend('django_sendfile.backends.simple')
+@override_settings(SENDFILE_BACKEND='django_sendfile.backends.development')
+class TestDevelopmentSendfileBackend(TempFileTestCase):
 
     def test_correct_file(self):
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
+        response.close()  # prevent resource warning from occurring
+
+    @override_settings(SENDFILE_CHECK_FILE_EXISTS=False)
+    def test_check_file_exists_still_raises_error(self):
+        filepath = "file/does/not/exist"
+        with self.assertRaises(Http404):
+            real_sendfile(HttpRequest(), filepath)
+
+
+@override_settings(SENDFILE_BACKEND='django_sendfile.backends.simple')
+class TestSimpleSendfileBackend(TempFileTestCase):
+
+    def test_correct_file(self):
+        filepath = self.ensure_file('readme.txt')
+        response = real_sendfile(HttpRequest(), filepath)
+        self.assertEqual(response.status_code, 200)
 
     def test_containing_unicode(self):
         filepath = self.ensure_file(u'péter_là_gueule.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
 
     def test_sensible_file_access_in_simplesendfile(self):
         filepath = self.ensure_file('../passwd')
@@ -201,38 +202,58 @@ class TestSimpleSendfileBackend(TempFileTestCase):
         with self.assertRaises(Http404):
             real_sendfile(HttpRequest(), filepath)
 
+    def test_last_modified(self):
+        request = HttpRequest()
+        request.method = 'GET'
+        filepath = self.ensure_file('readme.txt')
+        response = real_sendfile(request, filepath)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Last-Modified", response)
 
+        request.META['HTTP_IF_MODIFIED_SINCE'] = response['Last-Modified']
+        response = real_sendfile(request, filepath)
+        self.assertEqual(response.status_code, 304)
+
+    def test_etag(self):
+        request = HttpRequest()
+        request.method = 'GET'
+        filepath = self.ensure_file('readme.txt')
+        response = real_sendfile(request, filepath)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("ETag", response)
+
+        request.META['HTTP_IF_NONE_MATCH'] = response['ETag']
+        response = real_sendfile(request, filepath)
+        self.assertEqual(response.status_code, 304)
+
+
+@override_settings(SENDFILE_BACKEND='django_sendfile.backends.xsendfile')
 class TestXSendfileBackend(TempFileTestCase):
-
-    def setUp(self):
-        super(TestXSendfileBackend, self).setUp()
-        self.setSendfileBackend('django_sendfile.backends.xsendfile')
 
     def test_correct_file_in_xsendfile_header(self):
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(filepath, response['X-Sendfile'])
 
     def test_xsendfile_header_containing_unicode(self):
         filepath = self.ensure_file(u'péter_là_gueule.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(smart_str(filepath), response['X-Sendfile'])
 
 
+@override_settings(
+    SENDFILE_BACKEND='django_sendfile.backends.nginx',
+    SENDFILE_URL='/private',
+)
 class TestNginxBackend(TempFileTestCase):
 
-    def setUp(self):
-        super(TestNginxBackend, self).setUp()
-        self.setSendfileBackend('django_sendfile.backends.nginx')
-        settings.SENDFILE_URL = '/private'
-
+    @override_settings(SENDFILE_URL=None)
     def test_sendfile_url_not_set(self):
-        settings.SENDFILE_URL = None
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'')
         self.assertEqual(os.path.join(self.TEMP_FILE_ROOT, 'readme.txt'),
                          response['X-Accel-Redirect'])
@@ -240,30 +261,29 @@ class TestNginxBackend(TempFileTestCase):
     def test_correct_url_in_xaccelredirect_header(self):
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'')
         self.assertEqual('/private/readme.txt', response['X-Accel-Redirect'])
 
     def test_xaccelredirect_header_containing_unicode(self):
         filepath = self.ensure_file(u'péter_là_gueule.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'')
         self.assertEqual('/private/péter_là_gueule.txt', unquote(response['X-Accel-Redirect']))
 
 
+@override_settings(
+    SENDFILE_BACKEND='django_sendfile.backends.mod_wsgi',
+    SENDFILE_URL='/private',
+)
 class TestModWsgiBackend(TempFileTestCase):
 
-    def setUp(self):
-        super(TestModWsgiBackend, self).setUp()
-        self.setSendfileBackend('django_sendfile.backends.mod_wsgi')
-        settings.SENDFILE_URL = '/private'
-
+    @override_settings(SENDFILE_URL=None)
     def test_sendfile_url_not_set(self):
-        settings.SENDFILE_URL = None
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'')
         self.assertEqual(os.path.join(self.TEMP_FILE_ROOT, 'readme.txt'),
                          response['Location'])
@@ -271,13 +291,13 @@ class TestModWsgiBackend(TempFileTestCase):
     def test_correct_url_in_location_header(self):
         filepath = self.ensure_file('readme.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'')
         self.assertEqual('/private/readme.txt', response['Location'])
 
     def test_location_header_containing_unicode(self):
         filepath = self.ensure_file(u'péter_là_gueule.txt')
         response = real_sendfile(HttpRequest(), filepath)
-        self.assertTrue(response is not None)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b'')
         self.assertEqual('/private/péter_là_gueule.txt', unquote(response['Location']))
