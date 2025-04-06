@@ -1,6 +1,35 @@
 Changelog
 ---------
 
+0.7.2
+=====
+
+:release-date: 2025-04-06
+
+- Drop Python 3.8 support
+- Drop Django 5.0 support
+- Add Python 3.13 support
+- Add Django 5.1 and 5.2 support
+- Clean up tests
+
+    - Use ``override_settings``
+    - Stop using ``assertTrue(response is not None)``
+    - Add missing tests
+
+- Rewrite simple backend
+
+    - It now supports ETags as well as If-Modified-Since
+    - Use Django's own conditional request features rather than maintain our own
+
+- Fix coverage report
+- Move to Codeberg
+- Introduce ``SENDFILE_CHECK_FILE_EXISTS`` setting
+
+    - This allows users to host files in places where the Django app cannot
+      read them, if the backend supports it
+    - Add ``content_length`` parameter to ``sendfile()`` to manually set
+      ``Content-Length`` header
+
 0.7.1
 =====
 
