@@ -9,9 +9,9 @@
 /lib
 /build
 /docs/_build
+/examples/protected_downloads/protected
 .Python
 .tox
-/examples/protected_downloads/htmlcov
-/examples/protected_downloads/.coverage
-/examples/protected_downloads/coverage.xml
-/examples/protected_downloads/protected
+htmlcov
+.coverage
+coverage.xml
